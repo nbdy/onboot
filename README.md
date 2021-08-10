@@ -1,4 +1,4 @@
-# pyautorun
+# onboot
 cross-platform autostart installer(s)
 ## install
 ```shell
