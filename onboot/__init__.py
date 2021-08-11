@@ -16,6 +16,10 @@ class InstallerConfiguration:
     directory: str
     name: str
 
+    def __init__(self, directory: str, name: str):
+        self.directory = directory
+        self.name = name
+
     def get_path(self):
         return join(self.directory, self.name)
 

@@ -47,8 +47,8 @@ class CrontabInstaller(Installer):
         try:
             fp = f"/tmp/{random_str()}"
             with open(fp, "w") as o:
-                o.write(f"@reboot {self.config.get_path()}")
-            check_output(f"crontab {fp}")
+                o.write(f"@reboot {self.config.get_path()}\n")
+            check_output(f"crontab {fp}", shell=True)
             remove(fp)
         except Exception as e:
             print(e)

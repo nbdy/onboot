@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 setup(
     long_description=open("README.md", "r").read(),
     name="onboot",
-    version="0.5",
+    version="0.7",
     description="cross-platform onboot (autorun) installers",
     author="Pascal Eberlein",
     author_email="pascal@eberlein.io",
