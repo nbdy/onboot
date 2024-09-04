@@ -1,10 +1,12 @@
 import ctypes
+from abc import abstractmethod
 from dataclasses import dataclass
-from os import geteuid, remove
-from os.path import join, isdir, isfile
+from os import geteuid
+from pathlib import Path
 from random import choices
 from string import digits, ascii_letters
 from sys import platform
+from typing import Type, Optional
 
 
 def random_str(length: int = 8) -> str:
@@ -13,49 +15,44 @@ def random_str(length: int = 8) -> str:
 
 @dataclass
 class InstallerConfiguration:
-    directory: str
+    directory: Path
     name: str
 
-    def __init__(self, directory: str, name: str):
+    def __init__(self, directory: Path, name: str):
         self.directory = directory
         self.name = name
 
-    def get_path(self):
-        return join(self.directory, self.name)
+    def get_path(self) -> Path:
+        return self.directory.joinpath(self.name)
 
 
-class Installer(object):
-    autostart_directory: str = None
-    target_path: str = None
-    config: InstallerConfiguration = None
+class Installer:
+    autostart_directory: Path
+    target_path: Path
+    config: InstallerConfiguration
 
     def __init__(self, config: InstallerConfiguration):
         self.config = config
 
     @staticmethod
-    def write_file(path: str, data: str) -> bool:
-        try:
-            with open(path, "w") as o:
-                o.write(data)
-            return True
-        except Exception as e:
-            print(e)
-            return False
+    def write_file(path: Path, data: str) -> bool:
+        return path.write_text(data) == len(data)
 
-    def get_autostart_path(self):
-        return f"{self.autostart_directory}{self.config.name}"
+    def get_autostart_path(self) -> Path:
+        return self.autostart_directory.joinpath(self.config.name)
 
+    @abstractmethod
     def install(self) -> bool:
-        return False
+        ...
 
     def uninstall(self) -> bool:
-        if self.is_supported() and isfile(self.get_autostart_path()):
-            remove(self.get_autostart_path())
+        if self.is_supported() and self.get_autostart_path().is_file():
+            self.get_autostart_path().unlink()
             return True
         return False
 
     def is_supported(self) -> bool:
-        return self.autostart_directory is not None and isdir(self.autostart_directory)
+        return self.autostart_directory.is_dir()
 
     @staticmethod
     def is_root() -> bool:
@@ -66,36 +63,40 @@ class Installer(object):
         return r
 
 
-def install_if_supported(installer) -> bool:
+def install_if_supported(installer: Installer) -> bool:
     if installer.is_supported():
         return installer.install()
     return False
 
 
-def try_install(installers, config) -> [bool, Installer]:
-    r = False
-    i: Installer
+def try_install(installers: list[Type[Installer]], config) -> [bool, Installer]:
+    ret = False
+    used: Optional[Installer] = None
+
     for installer in installers:
         i = installer(config)
-        if not r and i.is_supported():
-            if i.install():
-                return True, i
-    return False, None
+        if not ret and i.is_supported():
+            ret = i.install()
+            if ret:
+                used = i
+                break
+
+    return ret, used
 
 
 def install_linux(config: InstallerConfiguration) -> [bool, Installer]:
-    from onboot.Linux import XDGInstaller, CrontabInstaller, ProfileInstaller, InitInstaller
+    from onboot.linux import XDGInstaller, CrontabInstaller, ProfileInstaller, InitInstaller
     return try_install([XDGInstaller, CrontabInstaller, ProfileInstaller, InitInstaller], config)
 
 
 def install_windows(config: InstallerConfiguration) -> [bool, Installer]:
-    from onboot.Windows import StartMenuInstaller
+    from onboot.windows import StartMenuInstaller
     return try_install([StartMenuInstaller], config)
 
 
 def install_darwin(config: InstallerConfiguration) -> [bool, Installer]:
-    from onboot.Darwin import PListInstaller
-    from onboot.Linux import CrontabInstaller
+    from onboot.darwin import PListInstaller
+    from onboot.linux import CrontabInstaller
     return try_install([PListInstaller, CrontabInstaller], config)
 
 
@@ -113,14 +114,15 @@ def install(config: InstallerConfiguration) -> [bool, Installer]:
 _installers = ["install", "install_linux", "install_darwin", "install_windows", "InstallerConfiguration"]
 
 if platform == "linux":
-    from onboot.Linux import XDGInstaller, CrontabInstaller, ProfileInstaller, InitInstaller
+    from onboot.linux import XDGInstaller, CrontabInstaller, ProfileInstaller, InitInstaller
     _installers += ["XDGInstaller", "CrontabInstaller", "ProfileInstaller", "InitInstaller"]
 elif platform == "darwin":
-    from onboot.Darwin import PListInstaller
-    _installers += ["PListInstaller"]
+    from onboot.darwin import PListInstaller
+    from onboot.linux import CrontabInstaller
+    _installers += ["PListInstaller", "CrontabInstaller"]
 elif platform == "windows":
-    from onboot.Windows import StartMenuInstaller, HKCUInstaller, HKLMInstaller
+    from onboot.windows import StartMenuInstaller, HKCUInstaller, HKLMInstaller
     _installers += ["StartMenuInstaller", "HKCUInstaller", "HKLMInstaller"]
 
 
-__all__ = _installers
+__all__ = ["Installer", "random_str"] + _installers

@@ -1,39 +1,37 @@
 import winreg
 from getpass import getuser
-from os import remove
+from pathlib import Path
 from subprocess import check_output
 
 from onboot import Installer, random_str
 
 
 class StartMenuInstaller(Installer):
-    autostart_directory = f"C:\\Users\\{getuser()}\\AppData\\Roaming\\icrosoft\\Windows\\Start Menu\\Programs\\Startup"
+    autostart_directory = Path(f"C:\\Users\\{getuser()}\\AppData\\Roaming\\Microsoft\\Windows\\Start Menu\\Programs\\Startup")
 
     def get_autostart_path(self):
-        return f"{self.autostart_directory}\\{self.config.name}.bat"
+        return self.autostart_directory.joinpath(f"{self.config.name}.bat")
 
     def install(self) -> bool:
         try:
-            with open(self.get_autostart_path(), "w+") as o:
-                o.write(f'start "" {self.config.get_path()}')
-            return True
-        except Exception as e:
-            print(e)
+            text = f'start "" {self.config.get_path()}'
+            return self.get_autostart_path().write_text(text) == len(text)
+        except:  # TODO
             return False
 
 
 class HKCUInstaller(Installer):
-    autostart_directory = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
+    registry_key = "Software\\Microsoft\\Windows\\CurrentVersion\\Run"
     registry = winreg.HKEY_CURRENT_USER
 
     def install(self) -> bool:
-        k = winreg.OpenKey(self.registry, self.autostart_directory, 0, winreg.KEY_ALL_ACCESS)
-        winreg.SetValueEx(k, self.config.name, 0, winreg.REG_SZ, self.config.get_path())
+        k = winreg.OpenKey(self.registry, self.registry_key, 0, winreg.KEY_ALL_ACCESS)
+        winreg.SetValueEx(k, self.config.name, 0, winreg.REG_SZ, str(self.config.get_path()))
         winreg.CloseKey(k)
         return True
 
     def uninstall(self) -> bool:
-        k = winreg.OpenKey(self.registry, self.autostart_directory, 0, winreg.KEY_ALL_ACCESS)
+        k = winreg.OpenKey(self.registry, self.registry_key, 0, winreg.KEY_ALL_ACCESS)
         winreg.DeleteKey(k, self.config.name)
         winreg.CloseKey(k)
         return True
@@ -50,14 +48,14 @@ class HKLMInstaller(HKCUInstaller):
 
 
 class IFEOInstaller(HKLMInstaller):  # TODO
-    autostart_directory = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Accessibility"
+    registry_key = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Accessibility"
 
     def is_supported(self) -> bool:
         return False
 
 
 class UserInitInstaller(HKLMInstaller):  # TODO
-    autostart_directory = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
+    registry_key = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
 
     def is_supported(self) -> bool:
         return False
@@ -69,7 +67,12 @@ class WMICInstaller(Installer):  # TODO
 
 
 class SchTaskInstaller(Installer):
-    def generate_task_xml(self, work_dir: str = "", author: str = "Microsoft Corporation", description: str = ""):
+    def generate_task_xml(
+            self,
+            work_dir: Path = Path(""),
+            author: str = "Microsoft Corporation",
+            description: str = ""
+    ):
         if work_dir == "":
             work_dir = self.config.get_path()
         return f'''
@@ -127,40 +130,21 @@ class SchTaskInstaller(Installer):
 
     def install(self) -> bool:
         try:
-            fp = f"%APPDATA%\\{random_str()}.xml"
-            with open(fp, "w") as o:
-                o.write(self.generate_task_xml())
+            text = self.generate_task_xml()
+            fp = Path("%APPDATA%").joinpath(f"{random_str()}.xml")
+            fp.write_text(text)
             check_output(f"cmd /C schtasks /create /xml {fp} /tn {self.config.name}", shell=True)
-            remove(fp)
+            fp.unlink()
             return True
-        except Exception as e:
-            print(e)
+        except:  # TODO
             return False
 
     def uninstall(self) -> bool:
         try:
             check_output(f'cmd /C schtasks /delete /tn "{self.config.name}"')
             return True
-        except Exception as e:
-            print(e)
+        except:  # TODO
             return False
 
     def is_supported(self) -> bool:
         return True
-
-
-class WindowsInstaller(Installer):
-    def install_cortana(self):
-        pass
-
-    def install_people(self):
-        pass
-
-    def install_ifeo(self):
-        pass
-
-    def install_userinit(self):
-        pass
-
-    def install_wmic(self):
-        pass

@@ -1,7 +1,10 @@
-from onboot.Darwin import PListInstaller, InstallerConfiguration
+from pathlib import Path
+
+from onboot import InstallerConfiguration
+from onboot.darwin import PListInstaller
 from os.path import isfile
 
-plist_config = InstallerConfiguration("/tmp/", "myfile")
+plist_config = InstallerConfiguration(Path("/tmp/"), "myfile")
 
 
 def test_plist_install():
