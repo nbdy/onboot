@@ -28,6 +28,7 @@ cross-platform autostart installer(s)
 ## todo
 
 - Tests
+- Handling of specific exceptions instead of the catch-all "except:"
 
 ## install
 
