@@ -1,11 +1,43 @@
 # onboot
+
 cross-platform autostart installer(s)
+
+## features
+
+- Linux
+  - [X] XDG
+  - [X] Cron
+  - [X] Profile.d
+  - [X] KDE Plasma
+  - [X] Init.d
+- Darwin
+  - [X] PList
+  - [X] Cron
+- Windows
+  - [X] StartMenu
+  - [X] Registry
+    - [X] HKCU
+    - [X] HKLM
+    - [ ] IFEO
+    - [ ] UserInit (Winlogon)
+  - [ ] WMCI
+  - [X] Task scheduler
+  - [ ] Cortana
+  - [ ] People
+
+## todo
+
+- Tests
+
 ## install
+
 ```shell
-pip3 install onboot
+pip install onboot
 ```
 ## usage
+
 ### try all available installers for a certain os
+
 ```python
 from onboot import install_linux, InstallerConfiguration
 
@@ -16,10 +48,11 @@ install_successful, used_installer = install_linux(InstallerConfiguration("/home
 if install_successful:
     used_installer.uninstall()
 ```
+
 ### only use a specific installer
 
 ```python
-from onboot.Windows import HKCUInstaller
+from onboot.windows import HKCUInstaller
 from onboot import InstallerConfiguration
 
 # install
