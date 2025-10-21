@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "onboot"
-version = "1.0.0"
+version = "1.0.1"
 requires-python = ">= 3.8"
 authors = [{name = "nbdy"}]
 maintainers = [{name = "nbdy"}]
