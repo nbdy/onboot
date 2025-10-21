@@ -32,9 +32,7 @@
   - ⏳ IFEO (Image File Execution Options)
   - ⏳ UserInit (Winlogon)
 - ✅ **Task Scheduler** - Windows Task Scheduler
-- ⏳ **WMCI** - Windows Management Instrumentation
-- ⏳ **Cortana** - Cortana integration
-- ⏳ **People** - Windows People integration
+- ⏳ **WMIC** - Windows Management Instrumentation
 
 ---
 
@@ -110,26 +108,35 @@ installer.uninstall()
 **Linux:**
 ```python
 from onboot.linux import (
-    XDGInstaller,
-    CrontabInstaller,
-    ProfileInstaller,
-    KDEPlasmaInstaller,
-    InitInstaller
+    XDGInstaller,              # XDG autostart (.desktop files)
+    CrontabInstaller,          # Crontab @reboot
+    ProfileInstaller,          # /etc/profile.d/
+    KDEPlasmaInstaller,        # KDE Plasma autostart scripts
+    InitInstaller,             # /etc/init.d/
+    SystemdUserInstaller,      # ~/.config/systemd/user/ services
+    SystemdSystemInstaller,    # /etc/systemd/system/ services
+    BashrcInstaller,           # ~/.bashrc
+    RcLocalInstaller           # /etc/rc.local
 )
 ```
 
 **macOS:**
 ```python
-from onboot.darwin import PListInstaller
+from onboot.darwin import (
+    PListInstaller,            # ~/Library/LaunchAgents/
+    LaunchDaemonInstaller,     # /Library/LaunchDaemons/ (system-wide)
+    ProfileInstaller           # /etc/profile
+)
 ```
 
 **Windows:**
 ```python
 from onboot.windows import (
-    HKCUInstaller,      # HKEY_CURRENT_USER
-    HKLMInstaller,      # HKEY_LOCAL_MACHINE
-    StartMenuInstaller,
-    SchTaskInstaller    # Task Scheduler
+    HKCUInstaller,             # HKEY_CURRENT_USER registry
+    HKLMInstaller,             # HKEY_LOCAL_MACHINE registry
+    StartMenuInstaller,        # Start Menu startup folder
+    SchTaskInstaller,          # Task Scheduler
+    UserInitInstaller          # Winlogon UserInit
 )
 ```
 
@@ -139,21 +146,21 @@ from onboot.windows import (
 
 The `InstallerConfiguration` class accepts the following parameters:
 
-- **`path`** (str): Path to the executable or script
-- **`name`** (str): Name of the application/service
-- **`args`** (list, optional): Command-line arguments
-- **`description`** (str, optional): Description of the service
+- **`directory`** (Path): Directory containing the executable or script
+- **`name`** (str): Name of the application/service (filename)
 
 Example:
 ```python
+from pathlib import Path
 from onboot import InstallerConfiguration
 
 config = InstallerConfiguration(
-    path="/usr/local/bin/myapp",
-    name="MyApplication",
-    args=["--daemon", "--config=/etc/myapp.conf"],
-    description="My awesome application"
+    directory=Path("/usr/local/bin"),
+    name="myapp"
 )
+
+# The full path will be: /usr/local/bin/myapp
+print(config.get_path())
 ```
 
 ---
@@ -175,28 +182,6 @@ uv run pytest
 
 ---
 
-## 📋 TODO
-
-- 🧪 Comprehensive test coverage
-- 🔍 Specific exception handling (replace catch-all `except:`)
-- 📚 Additional platform support
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
 ## 🤝 Contributing
 
 Contributions are welcome! Please feel free to submit a Pull Request.
-
----
-
-## 🔗 Links
-
-- **PyPI**: https://pypi.org/project/onboot/
-- **Repository**: https://github.com/nbdy/onboot
-- **Issues**: https://github.com/nbdy/onboot/issues

